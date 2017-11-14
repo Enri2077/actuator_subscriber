@@ -12,21 +12,32 @@
 
 #include <core/actuator_subscriber/SpeedConfiguration.hpp>
 #include <core/pid_ie/pid_ie.hpp>
-#include <core/actuator_msgs/Setpoint_f32.hpp>
 
 #include <ModuleConfiguration.hpp>
 #include <Module.hpp>
 
 namespace core {
 namespace actuator_subscriber {
-template <typename _DATATYPE, class _MESSAGETYPE = _DATATYPE>
+template <class _DATATYPE, class _MESSAGETYPE>
+struct ValueOf {
+    static inline _DATATYPE
+    _(
+        const _MESSAGETYPE& from
+    )
+    {
+        return from.value;
+    }
+};
+
+template <typename _DATATYPE, class _MESSAGETYPE = _DATATYPE, class _CONVERTER = ValueOf<_DATATYPE, _MESSAGETYPE> >
 class Speed:
     public core::mw::CoreNode,
-    public core::mw::CoreConfigurable<SpeedConfiguration>
+    public core::mw::CoreConfigurable<core::actuator_subscriber::SpeedConfiguration>
 {
 public:
     using DataType    = _DATATYPE;
     using MessageType = _MESSAGETYPE;
+    using Converter   = _CONVERTER;
 
 public:
     Speed(
@@ -103,13 +114,14 @@ private:
 
     static bool
     setpoint_callback(
-        const core::actuator_msgs::Setpoint_f32& msg,
+        const MessageType& msg,
         void*                                    context
     )
     {
-        Speed<_DATATYPE, _MESSAGETYPE>* _this = static_cast<Speed<_DATATYPE, _MESSAGETYPE>*>(context);
+        Speed<_DATATYPE, _MESSAGETYPE, _CONVERTER>* _this = static_cast<Speed<_DATATYPE, _MESSAGETYPE, _CONVERTER>*>(context);
         _this->_setpoint_timestamp = core::os::Time::now();
-        _this->_pid.set(msg.value);
+        DataType x = Converter::_(msg);
+        _this->_pid.set(x);
 
         return true;
     }
@@ -120,11 +132,24 @@ private:
         void*                               context
     )
     {
-        Speed<_DATATYPE, _MESSAGETYPE>* _this = static_cast<Speed<_DATATYPE, _MESSAGETYPE>*>(context);
+        Speed<_DATATYPE, _MESSAGETYPE, _CONVERTER>* _this = static_cast<Speed<_DATATYPE, _MESSAGETYPE, _CONVERTER>*>(context);
         _this->_actuator.set(_this->_pid.update(msg.value));
 
         return true;
     }
 };
+
+template <class _ACTUATOR>
+class Speed_:
+    public Speed<typename _ACTUATOR::Converter::TO, typename _ACTUATOR::Converter::FROM, typename _ACTUATOR::Converter>
+{
+public:
+    Speed_(
+        const char*                                                    name,
+        core::utils::BasicActuator<typename _ACTUATOR::Converter::TO>& sensor,
+        core::os::Thread::Priority                                     priority = core::os::Thread::PriorityEnum::NORMAL
+    ) : Speed<typename _ACTUATOR::Converter::TO, typename _ACTUATOR::Converter::FROM, typename _ACTUATOR::Converter>(name, sensor, priority) {}
+};
+
 }
 }

@@ -114,7 +114,7 @@ private:
     )
     {
         Subscriber<_DATATYPE, _MESSAGETYPE, _CONVERTER>* _this = static_cast<Subscriber<_DATATYPE, _MESSAGETYPE, _CONVERTER>*>(context);
-        float x = Converter::_(msg);
+        DataType x = Converter::_(msg);
         _this->_actuator.set(x);
 
         return true;
